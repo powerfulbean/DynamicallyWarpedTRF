@@ -1,7 +1,7 @@
 import numpy as np
 from dynamically_warped_trf.utils.io import load_dataset
 from dynamically_warped_trf.utils.args import get_arg_parser
-from dynamically_warped_trf.utils import execute
+from dynamically_warped_trf.core import execute
 
 if __name__ == '__main__':
     args = get_arg_parser()

@@ -1,10 +1,19 @@
+from datetime import datetime
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
+from funcTRF import Model
 from StimRespFlow.Engines.ResearchManage import CStudy,CExpr
-from dynamically_warped_trf.utils.io import pickle_save
+from StimRespFlow.DataProcessing.DeepLearning.Trainer import CTrainer,fPickPredTrueFromOutputT
+from StimRespFlow.DataProcessing.DeepLearning.Factory import CTorchDataset
+from StimRespFlow.DataProcessing.DeepLearning.Metrics import CMPearsonr
+from dynamically_warped_trf.utils import count_parameters
+from dynamically_warped_trf.utils.io import pickle_save, CLog
 from dynamically_warped_trf.mTRFpy.DataStruct import buildListFromSRFDataset
 from dynamically_warped_trf.mTRFpy import Model as mtrfModel
-
+from dynamically_warped_trf.core.model import  CTrainForwardFunc, CEvalForwardFunc, TwoMixedTRF, ASTRF, CNNTRF, build_mixed_model, from_pretrainedMixedRF
+# from dynamically_warped_trf.core.model2 import build_mixed_model, from_pretrainedMixedRF
+from dynamically_warped_trf.core import torchdata
 
 def iterFold():
     for i in range(9,-1,-1):#9,-1,-1l
@@ -161,6 +170,205 @@ def test_mtrf(
 
     return devResult_best, testMetricsReduce,testResults, oExpr
 
+def train_step(
+    device,
+    modelMTRF,
+    linW_lrgrLag,
+    model_config,
+    stimTrain,
+    dsTrainMTRF,
+    datasets,
+    epoch,
+    minLr,
+    maxLr,
+    wd1,
+    batchSize,
+    logFileName,
+    seed = 42, 
+    optimStr = 'AdamW', 
+    lrScheduler = 'cycle'
+):
+
+    #set torch random_seed
+    torch.backends.cudnn.deterministic = True
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
+    # oLog = None
+    oLog = CLog(logFileName[0],logFileName[1],'')
+    oLog.ifPrint = True
+    starttime = datetime.now()
+    oLog("start time:",starttime)
+
+    model_config['device'] = device
+    trainerDir = logFileName[0]
+
+    srate = datasets['train'].srate
+    torchDatasets = dict.fromkeys(datasets.keys())
+
+    for key in torchDatasets:
+        torchDatasets[key] = torchdata.TorchDataset(datasets[key], device = device)#, zscore = zscore)
+    # print(len(torchDatasets['train']))
+    dataloaders = dict.fromkeys(torchDatasets.keys())
+    assert batchSize == 1
+    for key in dataloaders:
+        dataloaders[key] = torch.utils.data.DataLoader(torchDatasets[key],batch_size = batchSize, shuffle = True) #need change back to shuffle = True
+    
+    linW = modelMTRF.w
+    linB = modelMTRF.b
+    
+    oMixedRF:TwoMixedTRF = build_mixed_model(**model_config)
+    oLog(oMixedRF)
+    oLog('number of trainable parameters',count_parameters(oMixedRF))#,True, oLog))
+    #additionaly we also fit a linear TRF with larger time lag for non-linear shifting of TRF
+    
+    cnntrf:CNNTRF = oMixedRF.trfs[0]
+    astrf:ASTRF = oMixedRF.trfs[1]
+    try:
+        astrf.trfsGen.fitFuncTRF(linW_lrgrLag[2:])
+    except:
+        oMixedRF.fitFuncTRF(linW_lrgrLag[2:])
+
+    try:
+        fig = astrf.trfsGen.basisTRF.vis()
+    except:
+        fig = oMixedRF.vis()
+    fig.savefig(f'{trainerDir}/visFTRF.png')
+    plt.close(fig)
+    
+
+    cnntrf.loadFromMTRFpy(linW[0:2], linB/2,device)
+    try:
+        astrf.set_linear_weights(linW[2:], linB/2)
+        astrf.if_enable_trfsGen = False
+        astrf.stop_update_linear()
+    except:
+        oMixedRF.set_linear_weights(linW[2:], linB/2)
+        oMixedRF.if_enable_trfsGen = False
+        oMixedRF.stop_update_linear()
+    # print(linW,linB)
+    # oMixedRF.oNonLinTRF.ifEnableNonLin = False
+    # oMixedRF.oNonLinTRF.stopUpdateLinear()
+    # print(oModel.oNonLinTRF.LinearKernels.NS.bias.shape)
+
+    def getLinModelWB(oModel):
+        cachedW1 = oModel.trfs[0].oCNN.weight.detach().cpu().numpy()
+        cachedB1 = oModel.trfs[0].oCNN.bias.detach().cpu().numpy()
+        try:
+            cachedW2 = oModel.trfs[1].ltiTRFsGen.weight.detach().cpu().numpy()
+            cachedB2 = oModel.trfs[1].ltiTRFsGen.bias.detach().cpu().numpy()
+        except:
+            cachedW2 = oModel.trfs[1].LinearKernels['nan'].weight.detach().cpu().numpy()
+            cachedB2 = oModel.trfs[1].LinearKernels['nan'].bias.detach().cpu().numpy()
+        return cachedW1,cachedB1, cachedW2#, cachedB2
+
+    cachedWB = getLinModelWB(oMixedRF)
+
+    #validate the results are almost the same
+    mTRFpyInput = stimTrain[0]
+    dldr = torch.utils.data.DataLoader(torchdata.TorchDataset(dsTrainMTRF,device = device),batch_size = 1)
+    nnTRFInput = next(iter(dldr))
+    print(len(nnTRFInput), len(nnTRFInput[0]), len(nnTRFInput[1]))
+    predTRFpy = modelMTRF.predict(mTRFpyInput)[0]
+    # print(oMixedRF.parseBatch(nnTRFInput)[0].shape)
+    try:
+        real_feats_keys = oMixedRF.feats_keys
+        oMixedRF.feats_keys = [['onset', 'env'], ['lex_sur']]
+    except:
+        pass
+    predNNTRFOutput = oMixedRF(*nnTRFInput)
+    predNNTRF = predNNTRFOutput[0].detach().cpu().numpy()[0].T
+    # print(predTRFpy.shape, predNNTRF.shape)
+    # print(mTRFpyInput, predTRFpy, predNNTRF)
+    assert np.allclose(predNNTRF,predTRFpy,rtol=1e-04, atol=1e-07)
+    #enable non-linear
+    try:
+        oMixedRF.feats_keys = real_feats_keys
+    except:
+        pass
+    
+    astrf.if_enable_trfsGen = True
+    oMixedRF.if_enable_trfsGen = True
+    
+    criterion = torch.nn.MSELoss()
+
+    if optimStr == 'AdamW':
+        params_for_train = None
+        try:
+            params_for_train = astrf.get_params_for_train()
+        except:
+            params_for_train = oMixedRF.get_params_for_train()
+        optimizer = torch.optim.AdamW(
+                        params = params_for_train,
+                        lr = minLr,
+                        weight_decay = wd1)
+    elif optimStr == 'AdamW-amsgrad':
+        optimizer = torch.optim.AdamW(
+                        params = oMixedRF.oNonLinTRF.getParamsForTrain(),
+                        lr = minLr,
+                        weight_decay = wd1, amsgrad = True)
+    elif optimStr == 'Adam':
+        optimizer = torch.optim.Adam(
+                        params = oMixedRF.oNonLinTRF.getParamsForTrain(),
+                        lr = minLr,
+                        weight_decay = wd1, amsgrad = False)
+    else:
+        raise NotImplementedError()
+
+    # oMixedRF.oNonLinTRF.stopUpdateLinear()
+    try:
+        astrf.stop_update_linear()
+    except:
+        oMixedRF.stop_update_linear()
+    cycleIter = (len(datasets['train']) // batchSize) * 2
+    if lrScheduler == 'cycle':
+        lr_scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer,minLr,maxLr,cycleIter,mode = 'triangular2',cycle_momentum=False)
+    elif lrScheduler is None:
+        lr_scheduler = None
+    elif lrScheduler == 'reduce':
+        assert minLr == maxLr
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience = 4)
+    else:
+        raise NotImplementedError()
+
+    oTrainer = CTrainer(epoch, device, criterion, optimizer,lr_scheduler)
+    oTrainer.setDir(oLog,trainerDir)
+    oTrainer.setDataLoader(dataloaders['train'],dataloaders['dev'])
+    # fPlot = PlotInterm(srate)
+    # oTrainer.addPlotFunc(fPlot)
+    
+    metricPerson = CMPearsonr(output_transform=fPickPredTrueFromOutputT,avgOutput = False)
+    oTrainer.addMetrics('corr', metricPerson)
+    bestEpoch,bestDevMetrics= oTrainer.train(oMixedRF,'corr',
+                                        trainingStep=CTrainForwardFunc,
+                                        evaluationStep=CEvalForwardFunc,
+                                        patience = 10)
+    pickle_save(model_config,oTrainer.tarFolder + '/configs.bin')
+    pickle_save(bestDevMetrics,oTrainer.tarFolder + '/devMetrics.bin')
+    bestModel = from_pretrainedMixedRF(model_config, oTrainer.tarFolder + '/savedModel_feedForward_best.pt')        
+    bestModel.oNonLinTRF.ifEnableNonLin = True
+    bestModel.oNonLinTRF.stopUpdateLinear()
+    bestModel.eval()
+
+    #assert the linear part is not changed
+    newWB = getLinModelWB(bestModel)
+    assert all([np.array_equal(cachedWB[i], newWB[i]) for i in range(len(cachedWB))])
+
+    oLog.Mode = 'safe'
+    starttime = datetime.now()
+    oLog("end time:",starttime)
+
+    oTrainer.trainer = None
+    oTrainer.evaluator = None
+    oTrainer.model = None
+    oTrainer.optimizer = None
+    oTrainer.lrScheduler = None
+    oTrainer.oLog = None
+    oTrainer.dtldTrain = None
+    oTrainer.dtldDev = None
+    oTrainer.fPlotsFunc = None
+    stop
+    return None,model_config,oTrainer,bestEpoch,bestDevMetrics,trainerDir
 
 def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
     #fold_nFold is a tuple, indicates [current fold, total fold]
@@ -189,54 +397,48 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
     minLag = timeLags[0]
     maxLag = timeLags[1]
     nBasis = otherParam.get('nBasis',None)
-    ctxExtClassName = otherParam.get('ctxModel','CausalConv')
+    transformer_name = otherParam.get('ctxModel','CausalConv')
     
     fs = datasets['train'].srate
     extraTimeLag = 200
     limitOfShift_idx = int(np.ceil(fs * extraTimeLag/1000))
 
-    inDimLinTRF = len(linStims) - 1
-    if 'tIntvl' in linStims:
-        inDimLinTRF -= 1
+    #the last stim will be replaced by dynamic TRF
+    linInDim = len(linStims) - 1
     stimFeats = nonLinStims
-    print('stims being used: ', stimFeats)
-    inDim = 1 
-    auxInDim = len(stimFeats) - 1
-    if 'tIntvl' in stimFeats:
-        auxInDim -= 1
-
+    print('stims being used: ',linStims, nonLinStims)
+    nonlinInDim = 1 
+    auxInDim = len(nonLinStims) - nonlinInDim
 
     tmin_ms = minLag
     tmax_ms = maxLag
-    
-    stateModuleName = ctxExtClassName
-    device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        try:
+            torch.arange(0,1, device=device)
+        except:
+            device = torch.device('cpu')
+    else:
+        device = torch.device('cpu')
 
-    generalConfig = {
+    model_config = {
         'tmin_ms':tmin_ms,
         'tmax_ms':tmax_ms,
         'fs':fs,
-    }
-    
-    
-    linConfig = {
-        'inDim':inDimLinTRF,
+        'linInDim':linInDim,
+        'nonlinInDim':nonlinInDim,
         'outDim':outDim,
-    }
-    
-    
-    nonLinConfig = {
-        'TransformName':stateModuleName,
-        'inDim':inDim,
-        'outDim':outDim,
+        'transformer_name':transformer_name,
         'limitOfShift_idx':limitOfShift_idx,
         'nBasis':nBasis, 
         'mode':fTRFMode, 
         'auxInDim':auxInDim,
         'device':device,
-        'nNonLinWin':nNonLinWin
+        'nNonLinWin':nNonLinWin,
+        'linFeats':linStims[:-1], 
+        'nonLinFeats':nonLinStims
     }
-
+    
 
     exprLogDict = {
         'limitOfShift_idx':limitOfShift_idx
@@ -265,9 +467,9 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         oLog = oRun.oLog
         oLog.ifPrint = True
         # stop
-        oLog('inDimLinTRF', inDimLinTRF, 'inDim', inDim, 'auxInDim', auxInDim)
+        oLog('linInDim', linInDim, 'nonlinInDim', nonlinInDim, 'auxInDim', auxInDim)
         ''' start preparing Ridge Regression of TRF '''
-        wds = 10**np.arange(-4,4).astype(float)
+        wds = [0.1] #10**np.arange(-4,4).astype(float) #[1] #
         dsTrainMTRF = datasets['train'].copy()
         dsDevMTRF = datasets['dev'].copy()
 
@@ -323,19 +525,13 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         #run the real train
         results = []
         logFileName = oRun.logFileName
-        if torch.cuda.is_available():
-            device = torch.device('cuda')
-        else:
-            device = torch.device('cpu')
-
-        finalStims = []
-        nonTIntvlLinStims = [s_ for s_ in linStims if s_ != 'tIntvl']
-        finalStims = nonTIntvlLinStims[:-1] + nonLinStims
+        finalStims = list(set(linStims + nonLinStims))
         oLog('oMixed Stims', finalStims)
         for d_ in datasets:
             datasets[d_].stimFilterKeys = finalStims
 
-        stop
+        # torchds = torchdata.TorchDataset(datasets['train'])
+        # print(torchds[0])
 
         (
             bestModel_best,
@@ -348,9 +544,7 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
             device,
             modelMTRF,
             linW_lrgrLag,
-            generalConfig,
-            linConfig,
-            nonLinConfig,
+            model_config,
             stimTrain,
             dsTrainMTRF,
             datasets,
