@@ -2,10 +2,8 @@ from datetime import datetime
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-from funcTRF import Model
 from StimRespFlow.Engines.ResearchManage import CStudy,CExpr
 from StimRespFlow.DataProcessing.DeepLearning.Trainer import CTrainer,fPickPredTrueFromOutputT
-from StimRespFlow.DataProcessing.DeepLearning.Factory import CTorchDataset
 from StimRespFlow.DataProcessing.DeepLearning.Metrics import CMPearsonr
 from dynamically_warped_trf.utils import count_parameters
 from dynamically_warped_trf.utils.io import pickle_save, CLog
@@ -345,9 +343,9 @@ def train_step(
                                         patience = 10)
     pickle_save(model_config,oTrainer.tarFolder + '/configs.bin')
     pickle_save(bestDevMetrics,oTrainer.tarFolder + '/devMetrics.bin')
-    bestModel = from_pretrainedMixedRF(model_config, oTrainer.tarFolder + '/savedModel_feedForward_best.pt')        
-    bestModel.oNonLinTRF.ifEnableNonLin = True
-    bestModel.oNonLinTRF.stopUpdateLinear()
+    bestModel:TwoMixedTRF = from_pretrainedMixedRF(model_config, oTrainer.tarFolder + '/savedModel_feedForward_best.pt')        
+    bestModel.trfs[1].if_enable_trfsGen = True
+    bestModel.trfs[1].stop_update_linear()
     bestModel.eval()
 
     #assert the linear part is not changed
@@ -367,7 +365,7 @@ def train_step(
     oTrainer.dtldTrain = None
     oTrainer.dtldDev = None
     oTrainer.fPlotsFunc = None
-    stop
+    # stop
     return None,model_config,oTrainer,bestEpoch,bestDevMetrics,trainerDir
 
 def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
@@ -469,7 +467,7 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         # stop
         oLog('linInDim', linInDim, 'nonlinInDim', nonlinInDim, 'auxInDim', auxInDim)
         ''' start preparing Ridge Regression of TRF '''
-        wds = [0.1] #10**np.arange(-4,4).astype(float) #[1] #
+        wds = 10**np.arange(-4,4).astype(float) #[1] #
         dsTrainMTRF = datasets['train'].copy()
         dsDevMTRF = datasets['dev'].copy()
 
@@ -561,8 +559,10 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         
         #reload best model
         bestModel_best = from_pretrainedMixedRF(configs_best, trainerDir_best + '/savedModel_feedForward_best.pt')     
-        bestModel_best.oNonLinTRF.ifEnableNonLin = True
-        bestModel_best.oNonLinTRF.stopUpdateLinear()
+        # bestModel_best.oNonLinTRF.ifEnableNonLin = True
+        # bestModel_best.oNonLinTRF.stopUpdateLinear()
+        bestModel_best.trfs[1].if_enable_trfsGen = True
+        bestModel_best.trfs[1].stop_update_linear()
         bestModel_best.eval()
 
         oRun['bestEpoch'] = bestEpoch_best
@@ -599,7 +599,7 @@ def test(oTrainer,model,modelMTRF,testSet,oRun = None, otherParam = None):
             print('oMixed Stims', finalStims)
             curDsTest.stimFilterKeys = finalStims
             # print(len(curDsTest))
-            curDatasetTest = CTorchDataset(curDsTest,T = False, device = device)
+            curDatasetTest = torchdata.TorchDataset(curDsTest, device = device)
             
             if len(curDatasetTest) > 0:
                 dsTestMTRF = curDsTest.copy()
@@ -608,7 +608,7 @@ def test(oTrainer,model,modelMTRF,testSet,oRun = None, otherParam = None):
                     # dsTestMTRF.stimFilterKeys = dsTestMTRF.stimFilterKeys[:-1]
                 stimTest,respTest,keys = buildListFromSRFDataset(dsTestMTRF,zscore = False)
                 _,mTRF_r,mTRF_err = modelMTRF.predict(stimTest,respTest)
-                curDataloaderTest = torch.utils.data.DataLoader(curDatasetTest,batch_size = 1, shuffle = True,num_workers = 1)
+                curDataloaderTest = torch.utils.data.DataLoader(curDatasetTest,batch_size = 1, shuffle = True)
                 testMetrics = oTrainer.test(model,curDataloaderTest,device = device,evaluationStep = CEvalForwardFunc)
                 result['r'] = testMetrics['corr']
                 result['loss'] = testMetrics['loss']
@@ -624,7 +624,7 @@ def test(oTrainer,model,modelMTRF,testSet,oRun = None, otherParam = None):
 
     if oRun is not None:
         oRun['testResult'] = testMetricsReduce
-        siIO.saveObject(testResults,oRun.folder + '/testMetrics.dict')
+        pickle_save(testResults,oRun.folder + '/testMetrics.dict')
         oRun.update()
 
     return testMetricsReduce,testResults
