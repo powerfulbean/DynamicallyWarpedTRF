@@ -24,7 +24,7 @@ if __name__ == '__main__':
     devResultsReduce = []
     testResultsReduce = []
 
-    for i in execute.iterFold():
+    for i in execute.iterFold() if len(foldList) == 0 else foldList:
         datasets = ds.nestedKFold(i,10)
         if test_mtrf:
             (
