@@ -31,9 +31,18 @@ def pickle_save(Object,folderName,tag=None, ext = '.bin'):
     file.close()
 
 def load_dataset(datasetname, root):
-    assert datasetname in ['ns', 'cpt', 'cpf']
-    state_dict = pickle_load(f'{root}/{datasetname}.pkl')
-    dataset = CDataSet.load(state_dict)
+    assert datasetname in ['ns', 'cpt', 'cpf', 'rl-l', 'rl-r']
+    if datasetname in ['rl-l', 'rl-r']:
+        ds_name, mod_name = datasetname.split('-')
+        state_dict = pickle_load(f'{root}/{ds_name}.pkl')
+        dataset = CDataSet.load(state_dict)
+        if mod_name == 'l':
+            dataset = dataset.selectByInfo({'reading':False})
+        else:
+            dataset = dataset.selectByInfo({'reading':True})
+    else:
+        state_dict = pickle_load(f'{root}/{datasetname}.pkl')
+        dataset = CDataSet.load(state_dict)
     return dataset
 
 def getUpperDir(path:str):

@@ -6,6 +6,110 @@ from nntrf import models as nntrf_models
 from torch.nn.functional import pad
 from matplotlib import pyplot as plt
 
+class PlotInterm:
+    
+    def __init__(self,srate, sample_batch):
+        self.srate = srate
+        self.sample_batch = sample_batch
+    
+    def plot_cnntrf(self,cnntrf:CNNTRF):
+        times = cnntrf.lagTimes
+        figures = []
+        for i in range(cnntrf.weights.shape[1]):
+            fig2 = plt.figure()
+            plt.plot(times,cnntrf.weights[:,i,:].T)
+            figures.append(fig2)
+        return figures
+
+    def plot_trfs(self,model:TwoMixedTRF):
+        figures = []
+        fig = plt.figure()
+        cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        astrf:ASTRF = model.trfs[1]
+        feats_key = model.feats_keys[1]
+        feats = []
+        feat_dict,_ = self.sample_batch
+        for feat_key in feats_key:
+            # print(feat_dict.keys())
+            feat = feat_dict[feat_key]
+            assert isinstance(feat, dict)
+            feats.append(feat)
+            # concatente
+        if len(feats) == 1:
+            feats = feats[0]
+        else:
+            # raise NotImplementedError
+            timeinfo_0 = feats[0]['timeinfo']
+            xs = []
+            for feat in feats:
+                xs.append(feat['x'])
+                torch.equal(timeinfo_0, feat['timeinfo'])
+            xs = torch.cat(xs, dim = -2)
+            feats = {
+                'x':xs,
+                'timeinfo':timeinfo_0
+            }
+
+        # (nBatch, outDim, nWin, nSeq)
+        trfs = astrf.get_trfs(feats['x'])
+        assert trfs.shape[0] == 1
+        trfs = trfs[0].permute(2,1,0)
+
+        for idx,TRF in enumerate(trfs):
+            if TRF.shape[1] == 128:
+                tarTRF = TRF[:,18]
+            else:
+                tarTRF = TRF[:,0:1]
+            plt.plot(astrf.lagTimes,tarTRF,color = cycle[idx % len(cycle)])
+            # break
+        figures.append(fig)
+
+
+        ws = astrf.trfsGen.transformer.conv.weight
+        for iIn in range(ws.shape[1]):
+            fig = plt.figure()
+            plt.plot(ws[:,iIn,:].numpy().T)
+            plt.title(f'transfomrer weights {feats_key[iIn]}')
+            figures.append(fig)
+        return figures
+
+
+    def plot_ltitrf(self,astrf:ASTRF):
+        times = astrf.lagTimes
+        figures = []
+        fig = plt.figure()
+        weight = astrf.ltiTRFsGen.weight.cpu().detach().numpy()
+        inDim = weight.shape[1]
+        for i in range(inDim):
+            weight = weight[:,i,:].T
+            plt.plot(times,weight) #
+            figures.append(fig) 
+        figures.append(fig)
+        return figures
+
+    def __call__(self,model:TwoMixedTRF):
+        model.eval()
+        cnntrf:CNNTRF = model.trfs[0]
+        astrf:ASTRF = model.trfs[1]
+
+        figures = []
+        astrf.lagTimes
+        #plot the nonlinear
+        trfs = trfs.detach().cpu().numpy()
+        
+        # plot dynamic TRFs
+        curFigs1 = self.plot_trfs(astrf)
+
+        # plot linear kernel of ASTRF
+        curFigs = self.plot_ltitrf(astrf) 
+        curFigs.extend(curFigs1)
+        figures.extend(curFigs)
+        
+        figs = self.plot_cnntrf(cnntrf)
+        figures.extend(figs)
+    
+        return figures
+
 class CTrainForwardFunc(CTrainerFunc):
     
     def func(self, engine, batch):
