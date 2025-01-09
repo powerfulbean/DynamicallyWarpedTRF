@@ -9,7 +9,16 @@ from dynamically_warped_trf.utils import count_parameters
 from dynamically_warped_trf.utils.io import pickle_save, CLog
 from dynamically_warped_trf.mTRFpy.DataStruct import buildListFromSRFDataset
 from dynamically_warped_trf.mTRFpy import Model as mtrfModel
-from dynamically_warped_trf.core.model import  CTrainForwardFunc, CEvalForwardFunc, TwoMixedTRF, ASTRF, CNNTRF, build_mixed_model, from_pretrainedMixedRF
+from dynamically_warped_trf.core.model import (
+    CTrainForwardFunc, 
+    CEvalForwardFunc, 
+    TwoMixedTRF, 
+    ASTRF, 
+    CNNTRF, 
+    build_mixed_model, 
+    from_pretrainedMixedRF,
+    PlotInterm
+)
 # from dynamically_warped_trf.core.model2 import build_mixed_model, from_pretrainedMixedRF
 from dynamically_warped_trf.core import torchdata
 
@@ -208,6 +217,11 @@ def train_step(
         torchDatasets[key] = torchdata.TorchDataset(datasets[key], device = device)#, zscore = zscore)
     # print(len(torchDatasets['train']))
     dataloaders = dict.fromkeys(torchDatasets.keys())
+    sample_batch = next(iter(
+        torch.utils.data.DataLoader(torchdata.TorchDataset(datasets['train'], device = device))
+    ))
+    # print(sample_batch)
+    # stop
     assert batchSize == 1
     for key in dataloaders:
         dataloaders[key] = torch.utils.data.DataLoader(torchDatasets[key],batch_size = batchSize, shuffle = True) #need change back to shuffle = True
@@ -332,8 +346,8 @@ def train_step(
     oTrainer = CTrainer(epoch, device, criterion, optimizer,lr_scheduler)
     oTrainer.setDir(oLog,trainerDir)
     oTrainer.setDataLoader(dataloaders['train'],dataloaders['dev'])
-    # fPlot = PlotInterm(srate)
-    # oTrainer.addPlotFunc(fPlot)
+    fPlot = PlotInterm(srate,sample_batch)
+    oTrainer.addPlotFunc(fPlot)
     
     metricPerson = CMPearsonr(output_transform=fPickPredTrueFromOutputT,avgOutput = False)
     oTrainer.addMetrics('corr', metricPerson)

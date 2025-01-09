@@ -53,7 +53,7 @@ class PlotInterm:
         # (nBatch, outDim, nWin, nSeq)
         trfs = astrf.get_trfs(feats['x'])
         assert trfs.shape[0] == 1
-        trfs = trfs[0].permute(2,1,0)
+        trfs = trfs[0].permute(2,1,0).cpu().numpy()
 
         for idx,TRF in enumerate(trfs):
             if TRF.shape[1] == 128:
@@ -65,7 +65,7 @@ class PlotInterm:
         figures.append(fig)
 
 
-        ws = astrf.trfsGen.transformer.conv.weight
+        ws = astrf.trfsGen.transformer.conv.weight.cpu()
         for iIn in range(ws.shape[1]):
             fig = plt.figure()
             plt.plot(ws[:,iIn,:].numpy().T)
@@ -77,36 +77,34 @@ class PlotInterm:
     def plot_ltitrf(self,astrf:ASTRF):
         times = astrf.lagTimes
         figures = []
-        fig = plt.figure()
         weight = astrf.ltiTRFsGen.weight.cpu().detach().numpy()
         inDim = weight.shape[1]
         for i in range(inDim):
+            fig = plt.figure()
             weight = weight[:,i,:].T
             plt.plot(times,weight) #
             figures.append(fig) 
-        figures.append(fig)
         return figures
 
     def __call__(self,model:TwoMixedTRF):
-        model.eval()
-        cnntrf:CNNTRF = model.trfs[0]
-        astrf:ASTRF = model.trfs[1]
+        with torch.no_grad():
+            model.eval()
+            cnntrf:CNNTRF = model.trfs[0]
+            astrf:ASTRF = model.trfs[1]
 
-        figures = []
-        astrf.lagTimes
-        #plot the nonlinear
-        trfs = trfs.detach().cpu().numpy()
-        
-        # plot dynamic TRFs
-        curFigs1 = self.plot_trfs(astrf)
+            figures = []
+            astrf.lagTimes
+            
+            # plot dynamic TRFs
+            curFigs1 = self.plot_trfs(model)
 
-        # plot linear kernel of ASTRF
-        curFigs = self.plot_ltitrf(astrf) 
-        curFigs.extend(curFigs1)
-        figures.extend(curFigs)
-        
-        figs = self.plot_cnntrf(cnntrf)
-        figures.extend(figs)
+            # plot linear kernel of ASTRF
+            curFigs = self.plot_ltitrf(astrf) 
+            figures.extend(curFigs1)
+            figures.extend(curFigs)
+            
+            figs = self.plot_cnntrf(cnntrf)
+            figures.extend(figs)
     
         return figures
 
