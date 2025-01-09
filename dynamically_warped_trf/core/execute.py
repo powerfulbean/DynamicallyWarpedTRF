@@ -22,8 +22,8 @@ from dynamically_warped_trf.core.model import (
 # from dynamically_warped_trf.core.model2 import build_mixed_model, from_pretrainedMixedRF
 from dynamically_warped_trf.core import torchdata
 
-def iterFold():
-    for i in range(9,-1,-1):#9,-1,-1l
+def iterFold(nFolds = 10):
+    for i in range(nFolds-1,-1,-1):#9,-1,-1l
         yield i
 
 def selectLambdaForMTRF(
@@ -217,11 +217,23 @@ def train_step(
         torchDatasets[key] = torchdata.TorchDataset(datasets[key], device = device)#, zscore = zscore)
     # print(len(torchDatasets['train']))
     dataloaders = dict.fromkeys(torchDatasets.keys())
-    sample_batch = next(iter(
-        torch.utils.data.DataLoader(torchdata.TorchDataset(datasets['train'], device = device))
-    ))
-    # print(sample_batch)
+    # sample_batch = next(iter(
+    #     torch.utils.data.DataLoader(torchdata.TorchDataset(datasets['train'], device = device))
+    # ))
+    # print(sample_batch[0]['lex_sur']['x'].shape)
     # stop
+    stim_dict_tensor_old, resp = torchdata.TorchDataset(datasets['train'], device = device)[0]
+    resp = resp.clone()[None,...]
+    stim_dict_tensor = {}
+    for k in stim_dict_tensor_old:
+        feat = stim_dict_tensor_old[k]
+        if isinstance(feat, dict):
+            stim_dict_tensor[k] = {k2:feat[k2].clone()[None, ...] for k2 in feat}
+        else:
+            stim_dict_tensor[k] = feat.clone()[None, ...]
+
+    
+    sample_batch = (stim_dict_tensor, resp)
     assert batchSize == 1
     for key in dataloaders:
         dataloaders[key] = torch.utils.data.DataLoader(torchDatasets[key],batch_size = batchSize, shuffle = True) #need change back to shuffle = True

@@ -19,13 +19,14 @@ if __name__ == '__main__':
     test_mtrf = args.test_mtrf
     studyName = args.studyName
     randomSeed = args.randomSeed
+    nFolds = args.nFolds
 
     testResults = []
     devResultsReduce = []
     testResultsReduce = []
 
-    for i in execute.iterFold() if len(foldList) == 0 else foldList:
-        datasets = ds.nestedKFold(i,10)
+    for i in execute.iterFold(nFolds) if len(foldList) == 0 else foldList:
+        datasets = ds.nestedKFold(i,nFolds)
         if test_mtrf:
             (
                 bestDevMetricsReduce, 

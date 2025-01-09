@@ -13,6 +13,7 @@ def get_arg_parser():
     parser.add_argument('--epoch',default=100, type=int)
     parser.add_argument('--randomSeed',default=42, type=int)
     parser.add_argument('--nBasis',default=21, type=int)
+    parser.add_argument('--nFolds',default=10, type=int)
     parser.add_argument('--wd',default=0.01, type=float)
     parser.add_argument('--lr', nargs='+', type=float, default = [0.001,0.001])
     parser.add_argument('--tarDir', type=str, default = './')
