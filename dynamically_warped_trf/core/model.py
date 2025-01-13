@@ -171,6 +171,7 @@ def build_mixed_model(
     auxInDim,
     nNonLinWin,
     device,
+    if_trans_chan,
 ) -> TwoMixedTRF: 
 
     trf1 = CNNTRF(
@@ -194,6 +195,10 @@ def build_mixed_model(
     #print(trf2.bias)
     nTransParams = len(FuncTRFsGen.parse_trans_params(mode))
     #the module that will estimate the transformation parameters
+    if if_trans_chan is True:
+        nTransParams = nTransParams * outDim
+    elif if_trans_chan == 'conv_proj':
+        nTransParams = (nTransParams, outDim)
     transformer = getattr(nntrf_models, transformer_name)(nonlinInDim + auxInDim, nTransParams, nNonLinWin)
     #module that estimates transformation parameter
     

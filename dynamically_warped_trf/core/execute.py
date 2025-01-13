@@ -260,7 +260,7 @@ def train_step(
     fig.savefig(f'{trainerDir}/visFTRF.png')
     plt.close(fig)
     
-
+    print(linW.shape)
     cnntrf.loadFromMTRFpy(linW[0:2], linB/2,device)
     try:
         astrf.set_linear_weights(linW[2:], linB/2)
@@ -303,7 +303,7 @@ def train_step(
     predNNTRFOutput = oMixedRF(*nnTRFInput)
     predNNTRF = predNNTRFOutput[0].detach().cpu().numpy()[0].T
     # print(predTRFpy.shape, predNNTRF.shape)
-    # print(mTRFpyInput, predTRFpy, predNNTRF)
+    # print(mTRFpyInput,nnTRFInput, predTRFpy, predNNTRF)
     assert np.allclose(predNNTRF,predTRFpy,rtol=1e-04, atol=1e-07)
     #enable non-linear
     try:
@@ -460,9 +460,10 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         'device':device,
         'nNonLinWin':nNonLinWin,
         'linFeats':linStims[:-1], 
-        'nonLinFeats':nonLinStims
+        'nonLinFeats':nonLinStims,
+        'if_trans_chan': 'conv_proj'
     }
-    
+    otherParam['if_trans_chan'] = model_config['if_trans_chan']
 
     exprLogDict = {
         'limitOfShift_idx':limitOfShift_idx
@@ -474,7 +475,7 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
     oStudy = CStudy(
         tarDir, studyName,
         [
-            ['optimStr'],['lrScheduler','epoch'],
+            ['if_trans_chan'],
             ['wd','lr'],
             ['nonLinStims','ctxModel'],
             ['dataset','timeLags','nNonLinWin'],
