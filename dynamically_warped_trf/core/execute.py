@@ -249,9 +249,10 @@ def train_step(
     cnntrf:CNNTRF = oMixedRF.trfs[0]
     astrf:ASTRF = oMixedRF.trfs[1]
     try:
-        astrf.trfsGen.fitFuncTRF(linW_lrgrLag[2:])
+        astrf.trfsGen.fitFuncTRF(linW_lrgrLag[-1:])
     except:
-        oMixedRF.fitFuncTRF(linW_lrgrLag[2:])
+        #benchmark for reproduce original result, will be removed in the future
+        oMixedRF.fitFuncTRF(linW_lrgrLag[-1:])
 
     try:
         fig = astrf.trfsGen.basisTRF.vis()
@@ -261,13 +262,13 @@ def train_step(
     plt.close(fig)
     
     print(linW.shape)
-    cnntrf.loadFromMTRFpy(linW[0:2], linB/2,device)
+    cnntrf.loadFromMTRFpy(linW[0:-1], linB/2,device)
     try:
-        astrf.set_linear_weights(linW[2:], linB/2)
+        astrf.set_linear_weights(linW[-1:], linB/2)
         astrf.if_enable_trfsGen = False
         astrf.stop_update_linear()
     except:
-        oMixedRF.set_linear_weights(linW[2:], linB/2)
+        oMixedRF.set_linear_weights(linW[-1:], linB/2)
         oMixedRF.if_enable_trfsGen = False
         oMixedRF.stop_update_linear()
     # print(linW,linB)
@@ -297,7 +298,7 @@ def train_step(
     # print(oMixedRF.parseBatch(nnTRFInput)[0].shape)
     try:
         real_feats_keys = oMixedRF.feats_keys
-        oMixedRF.feats_keys = [['onset', 'env'], ['lex_sur']]
+        oMixedRF.feats_keys = [real_feats_keys[0], real_feats_keys[1][0:1]]
     except:
         pass
     predNNTRFOutput = oMixedRF(*nnTRFInput)
@@ -461,7 +462,7 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         'nNonLinWin':nNonLinWin,
         'linFeats':linStims[:-1], 
         'nonLinFeats':nonLinStims,
-        'if_trans_chan': 'conv_proj'
+        'if_trans_chan': False,#'conv_proj'
     }
     otherParam['if_trans_chan'] = model_config['if_trans_chan']
 
@@ -623,7 +624,7 @@ def test(oTrainer,model,modelMTRF,testSet,oRun = None, otherParam = None):
             finalStims = []
             nonTIntvlLinStims = [s_ for s_ in linStims if s_ != 'tIntvl']
             finalStims = nonTIntvlLinStims[:-1] + nonLinStims
-            print('oMixed Stims', finalStims)
+            # print('oMixed Stims', finalStims)
             curDsTest.stimFilterKeys = finalStims
             # print(len(curDsTest))
             curDatasetTest = torchdata.TorchDataset(curDsTest, device = device)

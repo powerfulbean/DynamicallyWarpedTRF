@@ -31,7 +31,7 @@ def pickle_save(Object,folderName,tag=None, ext = '.bin'):
     file.close()
 
 def load_dataset(datasetname, root):
-    assert datasetname in ['ns', 'cpt', 'cpf', 'rl-l', 'rl-r']
+    assert datasetname in ['ns', 'cpt', 'cpf', 'rl_l', 'rl_r']
     if datasetname in ['rl-l', 'rl-r']:
         ds_name, mod_name = datasetname.split('-')
         state_dict = pickle_load(f'{root}/{ds_name}.pkl')
