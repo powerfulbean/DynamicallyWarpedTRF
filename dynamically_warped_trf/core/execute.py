@@ -462,7 +462,7 @@ def train(studyName,datasets,seed,fold_nFold,otherParam = {}, epoch = 100):
         'nNonLinWin':nNonLinWin,
         'linFeats':linStims[:-1], 
         'nonLinFeats':nonLinStims,
-        'if_trans_chan': False,#'conv_proj'
+        'if_trans_chan': 'conv_proj' #False,#'conv_proj'
     }
     otherParam['if_trans_chan'] = model_config['if_trans_chan']
 
