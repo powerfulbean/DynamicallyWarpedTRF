@@ -305,7 +305,12 @@ def train_step(
     predNNTRF = predNNTRFOutput[0].detach().cpu().numpy()[0].T
     # print(predTRFpy.shape, predNNTRF.shape)
     # print(mTRFpyInput,nnTRFInput, predTRFpy, predNNTRF)
-    assert np.allclose(predNNTRF,predTRFpy,rtol=1e-04, atol=1e-07)
+    try:
+        assert np.allclose(predNNTRF,predTRFpy,rtol=1e-04, atol=1e-07)
+    except:
+        # print(predNNTRF,predTRFpy)
+        print(np.abs(predNNTRF - predTRFpy).sum())
+        raise
     #enable non-linear
     try:
         oMixedRF.feats_keys = real_feats_keys

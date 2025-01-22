@@ -68,7 +68,7 @@ class PlotInterm:
         ws = astrf.trfsGen.transformer.conv.weight.cpu()
         for iIn in range(ws.shape[1]):
             fig = plt.figure()
-            plt.plot(ws[:,iIn,:].numpy().T)
+            plt.plot(ws[:,iIn,:].numpy().T, marker='o')
             plt.title(f'transfomrer weights {feats_key[iIn]}')
             figures.append(fig)
         return figures
@@ -199,7 +199,12 @@ def build_mixed_model(
         nTransParams = nTransParams * outDim
     elif if_trans_chan == 'conv_proj':
         nTransParams = (nTransParams, outDim)
-    transformer = getattr(nntrf_models, transformer_name)(nonlinInDim + auxInDim, nTransParams, nNonLinWin)
+    if isinstance(transformer_name, str):
+        transformer = getattr(nntrf_models, transformer_name)(nonlinInDim + auxInDim, nTransParams, nNonLinWin)
+    elif isinstance(transformer_name, torch.nn.Module):
+        transformer = transformer_name
+    else:
+        raise ValueError('transformer_name should be a module')
     #module that estimates transformation parameter
     
     # # trf2.set_trfs_gen(trfsGen)
