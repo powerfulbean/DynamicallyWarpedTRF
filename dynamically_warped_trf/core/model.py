@@ -172,6 +172,7 @@ def build_mixed_model(
     nNonLinWin,
     device,
     if_trans_chan,
+    if_trfsGen = True
 ) -> TwoMixedTRF: 
 
     trf1 = CNNTRF(
@@ -204,24 +205,25 @@ def build_mixed_model(
     elif isinstance(transformer_name, torch.nn.Module):
         transformer = transformer_name
     else:
-        raise ValueError('transformer_name should be a module')
+        raise ValueError('transformer_name should be a module or str')
     #module that estimates transformation parameter
     
     # # trf2.set_trfs_gen(trfsGen)
-    trfsGen = FuncTRFsGen(
-        nonlinInDim, 
-        outDim, 
-        tmin_ms, 
-        tmax_ms, 
-        fs, 
-        basisTRFName='fourier', 
-        limitOfShift_idx=limitOfShift_idx, 
-        nBasis = nBasis,
-        mode = mode,
-        transformer = transformer,
-        device = device
-    ).to(trf2.device)
-    trf2.trfsGen = trfsGen
+    if if_trfsGen:
+        trfsGen = FuncTRFsGen(
+            nonlinInDim, 
+            outDim, 
+            tmin_ms, 
+            tmax_ms, 
+            fs, 
+            basisTRFName='fourier', 
+            limitOfShift_idx=limitOfShift_idx, 
+            nBasis = nBasis,
+            mode = mode,
+            transformer = transformer,
+            device = device
+        ).to(trf2.device)
+        trf2.trfsGen = trfsGen
     mixedRF = TwoMixedTRF(
         device,
         [trf1, trf2],
