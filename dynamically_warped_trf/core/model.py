@@ -8,9 +8,11 @@ from matplotlib import pyplot as plt
 
 class PlotInterm:
     
-    def __init__(self,srate, sample_batch):
+    def __init__(self,srate, sample_batch, tar_folder = None):
         self.srate = srate
         self.sample_batch = sample_batch
+        self.cnter = 0
+        self.tar_folder = tar_folder
     
     def plot_cnntrf(self,cnntrf:CNNTRF):
         times = cnntrf.lagTimes
@@ -87,6 +89,7 @@ class PlotInterm:
         return figures
 
     def __call__(self,model:TwoMixedTRF):
+        self.cnter += 1
         with torch.no_grad():
             model.eval()
             cnntrf:CNNTRF = model.trfs[0]
