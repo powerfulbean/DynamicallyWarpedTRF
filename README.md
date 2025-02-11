@@ -3,7 +3,7 @@
 The code for [Dynamic modeling of EEG responses to natural speech reveals earlier processing of predictable words](https://doi.org/10.1101/2024.08.26.609779)
 
 
-## Citing nnTRF
+## Citing DynamicallyWarpedTRF
 Dou, J., Anderson, A. J., White, A. S., Norman-Haignere, S. V., & Lalor, E. C. (2024). Dynamic modeling of EEG responses to natural speech reveals earlier processing of predictable words. bioRxiv, 2024-08.
 ```
 @article {Dou2024.08.26.609779,
