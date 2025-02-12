@@ -11,7 +11,7 @@ import numpy as np
 from scipy.stats import zscore
 
 # import sys
-from memory_profiler import profile
+# from memory_profiler import profile
 oCuda = None
 def cmp2NArray(a,b,decimalNum = None):
     if decimalNum != None:

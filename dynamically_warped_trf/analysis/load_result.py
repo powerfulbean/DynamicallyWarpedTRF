@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 from StellarInfra import siIO, siDM, plt
 from statsmodels.stats.multitest import fdrcorrection
-from TRFOps.visualize import plotTopoplot
+from StimRespFlow.visualize import plotTopoplot
 
 def testImprv(imprv, ths = 0.05):
     imprv_stat = []

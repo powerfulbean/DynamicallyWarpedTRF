@@ -7,7 +7,7 @@ Created on Tue Jul  7 15:50:28 2020
 
 import numpy as np
 from . import Protocols as prtcls
-from memory_profiler import profile
+# from memory_profiler import profile
 from scipy.sparse import csr_matrix,lil_matrix
 from scipy.sparse.csc import csc_matrix
 from scipy.sparse import hstack

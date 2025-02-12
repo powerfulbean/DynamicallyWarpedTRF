@@ -26,7 +26,10 @@ from . import DataStruct as ds
 from . import Basics as bs
 from . import Core
 import sys
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except:
+    tqdm = None
 
 DirEnum = tuple([-1,1]) 
 
@@ -257,15 +260,6 @@ class CTRF:
                 value = v.copy()
             setattr(oTRF, k, value)
         return oTRF
-        
-            
-    def cuda(self,debug = False):
-        from .CudaCore import CCoreCuda
-        oCuda = CCoreCuda()
-        Core.oCuda = oCuda
-        ds.oCuda = oCuda
-        self._oCuda = oCuda
-        self._oCuda.DEBUG = debug
         
     def cpu(self):
         Core.oCuda = None
