@@ -25,7 +25,7 @@ setuptools.setup(
     "matplotlib==3.6.1",
     "mne==0.19.1",
     "nntrf",
-    "numpy>=1.20.1",
+    "numpy==1.20.1",
     "scikit-learn==1.0.2",
     "scipy==1.9.3",
     "statsmodels==0.13.5",
