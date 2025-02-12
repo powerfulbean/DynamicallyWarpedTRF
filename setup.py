@@ -9,7 +9,7 @@ import setuptools
 
 
 setuptools.setup(
-  name="DynamicallyWarpedTRF",
+  name="dynamically_warped_trf",
   version="0.0.1",
   author="Powerfulbean",
   author_email="powerfulbean@gmail.com",
